@@ -475,13 +475,13 @@ class Bybit(Feed):
                 self.id,
                 self.exchange_symbol_to_std_symbol(data['symbol']),
                 data["order_id"],
-                BUY if msg["side"] == 'Buy' else SELL,
+                BUY if data["side"] == 'Buy' else SELL,
                 order_status[data["order_status"]],
                 LIMIT if data['order_type'] == 'Limit' else MARKET,
-                Decimal(data['price']),
-                Decimal(data['cumQuantity']),
-                Decimal(data['qty']) - Decimal(data['cumQuantity']),
-                self.timestamp_normalize(data["updateTime"]),
+                Decimal(data.get('price', 0)),
+                Decimal(data.get('cum_exec_qty', 0)),
+                Decimal(data.get('qty', 0)) - Decimal(data.get('cum_exec_qty', 0)),
+                self.timestamp_normalize(data["update_time"]),
                 raw=data
             )
             await self.callback(ORDER_INFO, oi, timestamp)
