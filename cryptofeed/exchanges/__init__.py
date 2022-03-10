@@ -1,11 +1,12 @@
 '''
-Copyright (C) 2017-2021  Bryant Moscon - bmoscon@gmail.com
+Copyright (C) 2017-2022 Bryant Moscon - bmoscon@gmail.com
 
 Please see the LICENSE file for the terms and conditions
 associated with this software.
 '''
 from cryptofeed.defines import *
-from cryptofeed.defines import FTX as FTX_str, EXX as EXX_str, FMFW as FMFW_str
+from cryptofeed.defines import FTX as FTX_str, EXX as EXX_str, FMFW as FMFW_str, OKX as OKX_str
+from .bitdotcom import BitDotCom
 from .phemex import Phemex
 from .ascendex import AscendEX
 from .bequant import Bequant
@@ -23,6 +24,8 @@ from .bittrex import Bittrex
 from .blockchain import Blockchain
 from .bybit import Bybit
 from .coinbase import Coinbase
+from .cryptodotcom import CryptoDotCom
+from .delta import Delta
 from .deribit import Deribit
 from .dydx import dYdX
 from .exx import EXX
@@ -38,7 +41,7 @@ from .kraken import Kraken
 from .kraken_futures import KrakenFutures
 from .kucoin import KuCoin
 from .okcoin import OKCoin
-from .okex import OKEx
+from .okx import OKX
 from .poloniex import Poloniex
 from .probit import Probit
 from .upbit import Upbit
@@ -52,6 +55,7 @@ EXCHANGE_MAP = {
     BINANCE_US: BinanceUS,
     BINANCE: Binance,
     FMFW_str: FMFW,
+    BITDOTCOM: BitDotCom,
     BITFINEX: Bitfinex,
     BITFLYER: Bitflyer,
     BITHUMB: Bithumb,
@@ -61,7 +65,9 @@ EXCHANGE_MAP = {
     BLOCKCHAIN: Blockchain,
     BYBIT: Bybit,
     COINBASE: Coinbase,
+    CRYPTODOTCOM: CryptoDotCom,
     DERIBIT: Deribit,
+    DELTA: Delta,
     DYDX: dYdX,
     EXX_str: EXX,
     FTX_str: FTX,
@@ -76,7 +82,7 @@ EXCHANGE_MAP = {
     KRAKEN: Kraken,
     KUCOIN: KuCoin,
     OKCOIN: OKCoin,
-    OKEX: OKEx,
+    OKX_str: OKX,
     PHEMEX: Phemex,
     POLONIEX: Poloniex,
     PROBIT: Probit,

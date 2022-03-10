@@ -1,5 +1,5 @@
 '''
-Copyright (C) 2017-2021  Bryant Moscon - bmoscon@gmail.com
+Copyright (C) 2017-2022 Bryant Moscon - bmoscon@gmail.com
 
 Please see the LICENSE file for the terms and conditions
 associated with this software.
@@ -8,11 +8,11 @@ from collections import defaultdict
 from decimal import Decimal
 from functools import partial
 import logging
-from typing import Callable, Dict, List, Tuple
+from typing import Dict, Tuple
 
 from yapic import json
 
-from cryptofeed.connection import AsyncConnection, WSAsyncConn
+from cryptofeed.connection import AsyncConnection, RestEndpoint, Routes, WebsocketEndpoint
 from cryptofeed.defines import BID, ASK, BITFINEX, BUY, CURRENCY, FUNDING, L2_BOOK, L3_BOOK, SELL, TICKER, TRADES, PERPETUAL
 from cryptofeed.exceptions import MissingSequenceNumber
 from cryptofeed.feed import Feed
@@ -42,11 +42,9 @@ CHECKSUM = 131072
 
 class Bitfinex(Feed, BitfinexRestMixin):
     id = BITFINEX
-    symbol_endpoint = [
-        'https://api-pub.bitfinex.com/v2/conf/pub:list:pair:exchange',
-        'https://api-pub.bitfinex.com/v2/conf/pub:list:currency',
-        'https://api-pub.bitfinex.com/v2/conf/pub:list:pair:futures',
-    ]
+
+    websocket_endpoints = [WebsocketEndpoint('wss://api.bitfinex.com/ws/2', limit=25)]
+    rest_endpoints = [RestEndpoint('https://api-pub.bitfinex.com', routes=Routes(['/v2/conf/pub:list:pair:exchange', '/v2/conf/pub:list:currency', '/v2/conf/pub:list:pair:futures']))]
     websocket_channels = {
         L3_BOOK: 'book-R0-{}-{}',
         L2_BOOK: 'book-P0-{}-{}',
@@ -100,18 +98,13 @@ class Bitfinex(Feed, BitfinexRestMixin):
 
         return ret, info
 
-    def __init__(self, symbols=None, channels=None, subscription=None, number_of_price_points: int = 100,
-                 book_frequency: str = 'F0', **kwargs):
-        if number_of_price_points not in (1, 25, 100, 250):
-            raise ValueError("number_of_price_points should be in 1, 25, 100, 250")
-        if book_frequency not in ('F0', 'F1'):
-            raise ValueError("book_frequency should be in F0, F1")
+    def __init__(self, symbols=None, channels=None, subscription=None, number_of_price_points: int = 100, book_frequency: str = 'F0', **kwargs):
+        if number_of_price_points not in {1, 25, 100, 250}:
+            raise ValueError("number_of_price_points should be one of 1, 25, 100, 250")
+        if book_frequency not in {'F0', 'F1'}:
+            raise ValueError("book_frequency should be one of F0, F1")
 
-        if symbols is not None and channels is not None:
-            super().__init__('wss://api.bitfinex.com/ws/2', symbols=symbols, channels=channels, **kwargs)
-        else:
-            super().__init__('wss://api.bitfinex.com/ws/2', subscription=subscription, **kwargs)
-
+        super().__init__(symbols=symbols, channels=channels, subscription=subscription, **kwargs)
         self.number_of_price_points = number_of_price_points
         self.book_frequency = book_frequency
         if channels or subscription:
@@ -376,57 +369,29 @@ class Bitfinex(Feed, BitfinexRestMixin):
                   '='.join(list(msg.items())[-1]), handler.__name__ if hasattr(handler, '__name__') else handler.func.__name__)
         self.handlers[msg['chanId']] = handler
 
-    def connect(self) -> List[Tuple[AsyncConnection, Callable[[None], None], Callable[[str, float], None]]]:
-        """
-        Bitfinex only supports 25 pair/channel combinations per websocket, so
-        if we require more we need to create more connections
-
-        Furthermore, the sequence numbers bitfinex provides are per-connection
-        so we need to bind our connection id to the message handler
-        so we know to which connextion the sequence number belongs.
-        """
-        pair_channel = []
-        ret = []
-
-        def build(options: list):
-            subscribe = partial(self.subscribe, options=options)
-            conn = WSAsyncConn(self.address, self.id, **self.ws_defaults)
-            return conn, subscribe, self.message_handler, self.authenticate
-
-        for channel in self.subscription:
-            for pair in self.subscription[channel]:
-                pair_channel.append((pair, channel))
-                # Bitfinex max is 25 per connection
-                if len(pair_channel) == 25:
-                    ret.append(build(pair_channel))
-                    pair_channel = []
-
-        if len(pair_channel) > 0:
-            ret.append(build(pair_channel))
-
-        return ret
-
-    async def subscribe(self, connection: AsyncConnection, options: List[Tuple[str, str]] = None):
+    async def subscribe(self, connection: AsyncConnection):
         self.__reset()
         await connection.write(json.dumps({
             'event': "conf",
             'flags': SEQ_ALL
         }))
 
-        for pair, chan in options:
-            message = {'event': 'subscribe',
-                       'channel': chan,
-                       'symbol': pair
-                       }
-            if 'book' in chan:
-                parts = chan.split('-')
-                if len(parts) != 1:
-                    message['channel'] = 'book'
-                    try:
-                        message['prec'] = parts[1]
-                        message['freq'] = self.book_frequency
-                        message['len'] = self.number_of_price_points
-                    except IndexError:
-                        # any non specified params will be defaulted
-                        pass
-            await connection.write(json.dumps(message))
+        for chan, pairs in connection.subscription.items():
+            for pair in pairs:
+                message = {'event': 'subscribe',
+                           'channel': chan,
+                           'symbol': pair
+                           }
+                if 'book' in chan:
+                    parts = chan.split('-')
+                    if len(parts) != 1:
+                        message['channel'] = 'book'
+                        try:
+                            message['prec'] = parts[1]
+                            message['freq'] = self.book_frequency
+                            message['len'] = self.number_of_price_points
+                        except IndexError:
+                            # any non specified params will be defaulted
+                            pass
+
+                await connection.write(json.dumps(message))

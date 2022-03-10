@@ -1,5 +1,5 @@
 '''
-Copyright (C) 2017-2021  Bryant Moscon - bmoscon@gmail.com
+Copyright (C) 2017-2022 Bryant Moscon - bmoscon@gmail.com
 
 Please see the LICENSE file for the terms and conditions
 associated with this software.
@@ -13,8 +13,8 @@ from decimal import Decimal
 
 from yapic import json
 
-from cryptofeed.connection import AsyncConnection
-from cryptofeed.defines import BUY, FUNDING, FUTURES, HUOBI_DM, L2_BOOK, SELL, TRADES
+from cryptofeed.connection import AsyncConnection, RestEndpoint, Routes, WebsocketEndpoint
+from cryptofeed.defines import BUY, FUTURES, HUOBI_DM, L2_BOOK, SELL, TRADES
 from cryptofeed.feed import Feed
 from cryptofeed.types import OrderBook, Trade
 
@@ -24,7 +24,9 @@ LOG = logging.getLogger('feedhandler')
 
 class HuobiDM(Feed):
     id = HUOBI_DM
-    symbol_endpoint = 'https://www.hbdm.com/api/v1/contract_contract_info'
+    websocket_endpoints = [WebsocketEndpoint('wss://www.hbdm.com/ws')]
+    rest_endpoints = [RestEndpoint('https://www.hbdm.com', routes=Routes('/api/v1/contract_contract_info'))]
+
     websocket_channels = {
         L2_BOOK: 'depth.step0',
         TRADES: 'trade.detail',
@@ -47,9 +49,6 @@ class HuobiDM(Feed):
             info['tick_size'][s.normalized] = e['price_tick']
             info['instrument_type'][s.normalized] = FUTURES
         return ret, info
-
-    def __init__(self, **kwargs):
-        super().__init__('wss://www.hbdm.com/ws', **kwargs)
 
     def __reset(self):
         self._l2_book = {}
@@ -136,14 +135,13 @@ class HuobiDM(Feed):
     async def subscribe(self, conn: AsyncConnection):
         self.__reset()
         client_id = 0
-        for chan in self.subscription:
-            if chan == FUNDING:
-                continue
-            for pair in self.subscription[chan]:
+
+        for chan, symbols in conn.subscription.items():
+            for symbol in symbols:
                 client_id += 1
                 await conn.write(json.dumps(
                     {
-                        "sub": f"market.{pair}.{chan}",
+                        "sub": f"market.{symbol}.{chan}",
                         "id": str(client_id)
                     }
                 ))

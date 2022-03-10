@@ -1,5 +1,5 @@
 '''
-Copyright (C) 2017-2021  Bryant Moscon - bmoscon@gmail.com
+Copyright (C) 2017-2022 Bryant Moscon - bmoscon@gmail.com
 
 Please see the LICENSE file for the terms and conditions
 associated with this software.
@@ -13,10 +13,10 @@ from decimal import Decimal
 
 from yapic import json
 
-from cryptofeed.connection import AsyncConnection
-from cryptofeed.defines import BUY, CANDLES, HUOBI, L2_BOOK, SELL, TRADES
+from cryptofeed.connection import AsyncConnection, RestEndpoint, Routes, WebsocketEndpoint
+from cryptofeed.defines import BUY, CANDLES, HUOBI, L2_BOOK, SELL, TRADES, TICKER
 from cryptofeed.feed import Feed
-from cryptofeed.types import OrderBook, Trade, Candle
+from cryptofeed.types import OrderBook, Trade, Candle, Ticker
 
 
 LOG = logging.getLogger('feedhandler')
@@ -24,12 +24,16 @@ LOG = logging.getLogger('feedhandler')
 
 class Huobi(Feed):
     id = HUOBI
-    symbol_endpoint = 'https://api.huobi.pro/v1/common/symbols'
+    websocket_endpoints = [WebsocketEndpoint('wss://api.huobi.pro/ws')]
+    rest_endpoints = [RestEndpoint('https://api.huobi.pro', routes=Routes('/v1/common/symbols'))]
+
     valid_candle_intervals = {'1m', '5m', '15m', '30m', '1h', '4h', '1d', '1w', '1M', '1Y'}
+    candle_interval_map = {'1m': '1min', '5m': '5min', '15m': '15min', '30m': '30min', '1h': '60min', '4h': '4hour', '1d': '1day', '1M': '1mon', '1w': '1week', '1Y': '1year'}
     websocket_channels = {
         L2_BOOK: 'depth.step0',
         TRADES: 'trade.detail',
         CANDLES: 'kline',
+        TICKER: 'ticker'
     }
 
     @classmethod
@@ -51,13 +55,6 @@ class Huobi(Feed):
             info['instrument_type'][s.normalized] = s.type
         return ret, info
 
-    def __init__(self, **kwargs):
-        super().__init__('wss://api.huobi.pro/ws', **kwargs)
-        lookup = {'1m': '1min', '5m': '5min', '15m': '15min', '30m': '30min', '1h': '60min', '4h': '4hour', '1d': '1day', '1M': '1mon', '1w': '1week', '1Y': '1year'}
-        self.candle_interval = lookup[self.candle_interval]
-        self.normalize_interval = {value: key for key, value in lookup.items()}
-        self.__reset()
-
     def __reset(self):
         self._l2_book = {}
 
@@ -71,6 +68,38 @@ class Huobi(Feed):
         self._l2_book[pair].book.asks = {Decimal(price): Decimal(amount) for price, amount in data['asks']}
 
         await self.book_callback(L2_BOOK, self._l2_book[pair], timestamp, timestamp=self.timestamp_normalize(msg['ts']), raw=msg)
+
+    async def _ticker(self, msg: dict, timestamp: float):
+        """
+        {
+            "ch":"market.btcusdt.ticker",
+            "ts":1630982370526,
+            "tick":{
+                "open":51732,
+                "high":52785.64,
+                "low":51000,
+                "close":52735.63,
+                "amount":13259.24137056181,
+                "vol":687640987.4125315,
+                "count":448737,
+                "bid":52732.88,
+                "bidSize":0.036,
+                "ask":52732.89,
+                "askSize":0.583653,
+                "lastPrice":52735.63,
+                "lastSize":0.03
+            }
+        }
+        """
+        t = Ticker(
+            self.id,
+            self.exchange_symbol_to_std_symbol(msg['ch'].split('.')[1]),
+            msg['tick']['bid'],
+            msg['tick']['ask'],
+            self.timestamp_normalize(msg['ts']),
+            raw=msg['tick']
+        )
+        await self.callback(TICKER, t, timestamp)
 
     async def _trade(self, msg: dict, timestamp: float):
         """
@@ -123,7 +152,7 @@ class Huobi(Feed):
             }
         }
         """
-        interval = self.normalize_interval[interval]
+        interval = self.normalize_candle_interval[interval]
         start = int(msg['tick']['id'])
         end = start + timedelta_str_to_sec(interval) - 1
         c = Candle(
@@ -157,6 +186,8 @@ class Huobi(Feed):
         elif 'ch' in msg:
             if 'trade' in msg['ch']:
                 await self._trade(msg, timestamp)
+            elif 'tick' in msg['ch']:
+                await self._ticker(msg, timestamp)
             elif 'depth' in msg['ch']:
                 await self._book(msg, timestamp)
             elif 'kline' in msg['ch']:
@@ -176,7 +207,7 @@ class Huobi(Feed):
                 normalized_chan = self.exchange_channel_to_std(chan)
                 await conn.write(json.dumps(
                     {
-                        "sub": f"market.{pair}.{chan}" if normalized_chan != CANDLES else f"market.{pair}.{chan}.{self.candle_interval}",
+                        "sub": f"market.{pair}.{chan}" if normalized_chan != CANDLES else f"market.{pair}.{chan}.{self.candle_interval_map[self.candle_interval]}",
                         "id": client_id
                     }
                 ))

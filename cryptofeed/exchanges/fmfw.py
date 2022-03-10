@@ -1,5 +1,5 @@
 '''
-Copyright (C) 2017-2021  Bryant Moscon - bmoscon@gmail.com
+Copyright (C) 2017-2022 Bryant Moscon - bmoscon@gmail.com
 
 Please see the LICENSE file for the terms and conditions
 associated with this software.
@@ -11,6 +11,7 @@ from typing import Dict, Tuple
 
 from yapic import json
 
+from cryptofeed.connection import RestEndpoint, Routes, WebsocketEndpoint
 from cryptofeed.defines import ASK, BID, BUY, CANDLES, FMFW as FMFW_id, L2_BOOK, SELL, TICKER, TRADES
 from cryptofeed.exceptions import MissingSequenceNumber
 from cryptofeed.feed import Feed
@@ -24,8 +25,11 @@ LOG = logging.getLogger('feedhandler')
 
 class FMFW(Feed):
     id = FMFW_id
-    symbol_endpoint = 'https://api.fmfw.io/api/3/public/symbol'
+    websocket_endpoints = [WebsocketEndpoint('wss://api.fmfw.io/api/3/ws/public')]
+    rest_endpoints = [RestEndpoint('https://api.fmfw.io', routes=Routes('/api/3/public/symbol'))]
+
     valid_candle_intervals = {'1m', '3m', '5m', '15m', '30m', '1h', '4h', '1d', '1w', '1M'}
+    candle_interval_map = {'1m': 'M1', '3m': 'M3', '5m': 'M5', '15m': 'M15', '30m': 'M30', '1h': 'H1', '4h': 'H4', '1d': 'D1', '1w': 'D7', '1M': '1M'}
     websocket_channels = {
         L2_BOOK: 'orderbook/full',
         TRADES: 'trades',
@@ -49,12 +53,6 @@ class FMFW(Feed):
     @classmethod
     def timestamp_normalize(cls, ts: float) -> float:
         return ts / 1000.0
-
-    def __init__(self, **kwargs):
-        super().__init__('wss://api.fmfw.io/api/3/ws/public', **kwargs)
-        interval_map = {'1m': 'M1', '3m': 'M3', '5m': 'M5', '15m': 'M15', '30m': 'M30', '1h': 'H1', '4h': 'H4', '1d': 'D1', '1w': 'D7', '1M': '1M'}
-        self.candle_interval = interval_map[self.candle_interval]
-        self.normalize_interval = {value: key for key, value in interval_map.items()}
 
     def __reset(self):
         self._l2_book = {}
@@ -179,8 +177,8 @@ class FMFW(Feed):
                     self.id,
                     symbol,
                     u['t'] / 1000,
-                    u['t'] / 1000 + timedelta_str_to_sec(self.normalize_interval[interval]) - 0.1,
-                    self.normalize_interval[interval],
+                    u['t'] / 1000 + timedelta_str_to_sec(self.normalize_candle_interval[interval]) - 0.1,
+                    self.normalize_candle_interval[interval],
                     None,
                     Decimal(u['o']),
                     Decimal(u['c']),
@@ -214,6 +212,6 @@ class FMFW(Feed):
         for chan in self.subscription:
             await conn.write(json.dumps({"method": "subscribe",
                                          "params": {"symbols": self.subscription[chan]},
-                                         "ch": chan if chan != 'candles/' else chan + self.candle_interval,
+                                         "ch": chan if chan != 'candles/' else chan + self.candle_interval_map[self.candle_interval],
                                          "id": 1234
                                          }))

@@ -1,5 +1,5 @@
 '''
-Copyright (C) 2017-2021  Bryant Moscon - bmoscon@gmail.com
+Copyright (C) 2017-2022 Bryant Moscon - bmoscon@gmail.com
 
 Please see the LICENSE file for the terms and conditions
 associated with this software.
@@ -210,7 +210,7 @@ class FeedHandler:
             task.cancel()
 
         LOG.info('FH: run the pending tasks until complete')
-        loop.run_until_complete(asyncio.gather(*pending, loop=loop, return_exceptions=True))
+        loop.run_until_complete(asyncio.gather(*pending, return_exceptions=True))
 
         LOG.info('FH: shutdown asynchronous generators')
         loop.run_until_complete(loop.shutdown_asyncgens())

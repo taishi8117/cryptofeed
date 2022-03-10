@@ -1,12 +1,12 @@
 '''
-Copyright (C) 2017-2021  Bryant Moscon - bmoscon@gmail.com
+Copyright (C) 2017-2022 Bryant Moscon - bmoscon@gmail.com
 
 Please see the LICENSE file for the terms and conditions
 associated with this software.
 '''
 from collections import defaultdict
 from typing import Dict, Tuple
-from cryptofeed.connection import AsyncConnection
+from cryptofeed.connection import AsyncConnection, RestEndpoint, Routes, WebsocketEndpoint
 import logging
 from decimal import Decimal
 
@@ -24,7 +24,8 @@ LOG = logging.getLogger('feedhandler')
 
 class AscendEX(Feed):
     id = ASCENDEX
-    symbol_endpoint = 'https://ascendex.com/api/pro/v1/products'
+    websocket_endpoints = [WebsocketEndpoint('wss://ascendex.com/1/api/pro/v1/stream')]
+    rest_endpoints = [RestEndpoint('https://ascendex.com', routes=Routes('/api/pro/v1/products'))]
     websocket_channels = {
         L2_BOOK: 'depth:',
         TRADES: 'trades:',
@@ -48,10 +49,6 @@ class AscendEX(Feed):
                 info['instrument_type'][s.normalized] = s.type
 
         return ret, info
-
-    def __init__(self, **kwargs):
-        super().__init__('wss://ascendex.com/1/api/pro/v1/stream', **kwargs)
-        self.__reset()
 
     def __reset(self):
         self._l2_book = {}

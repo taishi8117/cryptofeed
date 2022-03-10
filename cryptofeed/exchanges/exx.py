@@ -11,7 +11,7 @@ from typing import Dict, Tuple
 
 from yapic import json
 
-from cryptofeed.connection import AsyncConnection
+from cryptofeed.connection import AsyncConnection, RestEndpoint, Routes, WebsocketEndpoint
 from cryptofeed.defines import BID, ASK, BUY
 from cryptofeed.defines import EXX as EXX_id
 from cryptofeed.defines import L2_BOOK, SELL, TRADES
@@ -24,7 +24,9 @@ LOG = logging.getLogger('feedhandler')
 
 class EXX(Feed):
     id = EXX_id
-    symbol_endpoint = "https://api.exx.com/data/v1/tickers"
+    websocket_endpoints = [WebsocketEndpoint('wss://ws.exx.com/websocket')]
+    rest_endpoints = [RestEndpoint('https://api.exx.com', routes=Routes('/data/v1/tickers'))]
+
     websocket_channels = {
         L2_BOOK: 'ENTRUST_ADD',
         TRADES: 'TRADE',
@@ -42,10 +44,6 @@ class EXX(Feed):
             ret[s.normalized] = sym
             info['instrument_type'][s.normalized] = s.type
         return ret, info
-
-    def __init__(self, **kwargs):
-        super().__init__('wss://ws.exx.com/websocket', **kwargs)
-        self.__reset()
 
     def __reset(self):
         self._l2_book = {}

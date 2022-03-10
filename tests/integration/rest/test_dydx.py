@@ -1,5 +1,5 @@
 '''
-Copyright (C) 2017-2021  Bryant Moscon - bmoscon@gmail.com
+Copyright (C) 2017-2022 Bryant Moscon - bmoscon@gmail.com
 
 Please see the LICENSE file for the terms and conditions
 associated with this software.
@@ -13,7 +13,11 @@ d = dYdX()
 
 
 def teardown_module(module):
-    asyncio.get_event_loop().run_until_complete(d.shutdown())
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        loop = asyncio.new_event_loop()
+    loop.run_until_complete(d.shutdown())
 
 
 class TestDYDXRest:
