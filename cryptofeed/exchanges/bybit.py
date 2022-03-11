@@ -169,6 +169,7 @@ class Bybit(Feed):
         elif msg['topic'].startswith('liquidation'):
             await self._liquidation(msg, timestamp)
         elif "instrument_info" in msg["topic"]:
+            # print(msg)
             await self._instrument_info(msg, timestamp)
         elif "order" in msg["topic"]:
             await self._order(msg, timestamp)
@@ -282,6 +283,15 @@ class Bybit(Feed):
                     self.id,
                     self.exchange_symbol_to_std_symbol(info['symbol']),
                     Decimal(info['open_interest']),
+                    ts,
+                    raw=info
+                )
+                await self.callback(OPEN_INTEREST, oi, timestamp)
+            elif 'open_interest_e8' in info:
+                oi = OpenInterest(
+                    self.id,
+                    self.exchange_symbol_to_std_symbol(info['symbol']),
+                    Decimal(info['open_interest_e8']) * Decimal('1e-8'),
                     ts,
                     raw=info
                 )
